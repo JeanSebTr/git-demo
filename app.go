@@ -4,12 +4,11 @@ import (
 	"encoding/base64"
 	"github.com/xpensia/sshgate"
 	"io"
+	"io/ioutil"
 	"log"
-	"net"
 	"os"
 	"os/exec"
 	"strconv"
-	"strings"
 	"syscall"
 )
 
@@ -29,11 +28,18 @@ func main() {
 	}
 
 	// pass the private key and an authentication function
-	server := sshgate.NewServer(pemBytes, Authenticate)
+	server, err := sshgate.NewServer(pemBytes, Authenticate)
+	if err != nil {
+		log.Panicf("NewServer error: %#v\n", err)
+	}
 
 	// listen on specific port and address
 	// "" is equivalent to "0.0.0.0" or “all interfaces”
-	if err := server.Listen("", strconv.Atoi(os.Getenv("PORT"))); err != nil {
+	port, err := strconv.Atoi(os.Getenv("PORT"))
+	if err != nil {
+		log.Panicf("Can't parse port: %#v\n", err)
+	}
+	if err := server.Listen("", port); err != nil {
 		log.Panicf("Listen error: %#v\n", err)
 	}
 }
@@ -56,17 +62,18 @@ func Authenticate(c sshgate.Connection, user, algo string, pubkey []byte) (bool,
 // Implement sshgate.Executable
 func (a GitApp) CanExec(cmd string, args []string, env map[string]string) bool {
 	// TODO : check repo authorization
+	log.Println("User want to exec: ", cmd, args)
 	return cmd == "git-receive-pack" || cmd == "git-upload-pack"
 }
 
-func (a GitApp) Exec(stdin io.Reader, stdout, stderr io.Writer, cmd string, args []string, env map[string]string) int {
-	log.Println("Exec: ", cmd, args...)
+func (a GitApp) Exec(cmd string, args []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) int {
+	log.Println("Exec: ", cmd, args)
 	// see http://godoc.org/os/exec
 	git := exec.Command(cmd, args...)
 	git.Stdin = stdin
 	git.Stdout = stdout
 	git.Stderr = stderr
-	git.Env = env
+	git.Env = sshgate.MapToEnviron(env)
 	if err := git.Run(); err != nil {
 		if exit, ok := err.(*exec.ExitError); ok {
 			if status, ok := exit.Sys().(syscall.WaitStatus); ok {

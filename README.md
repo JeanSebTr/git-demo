@@ -12,5 +12,8 @@ A demo of [sshgate][sshgate] for Git push/pull
 
 `PORT=2222 go run app.go`
 
+In an other terminal type :
+`git pull ssh://git@127.0.0.1:2222/full.absolute.path.to.git.folder master:test-git-demo`
+
 
 [sshgate]: https://github.com/xpensia/sshgate
